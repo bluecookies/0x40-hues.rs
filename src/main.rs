@@ -24,13 +24,14 @@ use sdl2::image::ImageRWops;
 
 
 use rodio::source::{Source, Buffered, Zero as ZeroSource};
-use rodio::Sink;
+use rodio::{Endpoint, Sink};
 
 use rand::Rng;
 
 mod mp3;
 mod loader;
 mod ui;
+mod surface;
 
 use loader::LoadStatus;
 use ui::TextUi;
@@ -169,9 +170,9 @@ fn main() {
 			Ok(LoadStatus::Done(pack)) => {
 				images.extend(pack.images.into_iter().map(|image_loader| {
 					let texture = {
-						let rwops = RWops::from_bytes(&image_loader.data[..]).unwrap();
-						let surface = rwops.load_png().unwrap();
-						texture_creator.create_texture_from_surface(surface).unwrap()
+						//let rwops = RWops::from_bytes(&image_loader.data[..]).unwrap();
+						//let surface = rwops.load_png().unwrap();
+						texture_creator.create_texture_from_surface(&image_loader.data).unwrap()
 					};
 
 					Image::from_loader(image_loader, texture)
@@ -240,15 +241,15 @@ fn main() {
 	let mut curr_image_index = rng.gen_range(0, images.len());
 	basic_ui.update_image(&images[curr_image_index].name);
 
-	// TODO: figure out how to do this without dropping the sink everytime
-	let mut music_track = Sink::new(&rodio::default_endpoint().unwrap());
+	let endpoint = &rodio::default_endpoint().unwrap();
+	let mut music_track = Sink::new(&endpoint);
 	//"DJ Genericname - Dear you"
 	//"Vexare - The Clockmaker"
 	let mut curr_song_index = get_song_index(&songs, "DJ Genericname - Dear you").or_else(|| {
 		Some(rng.gen_range(0, songs.len()))
 	});
 	curr_song_index.map(|index| {
-		songs[index].play(&mut music_track, &mut basic_ui);
+		music_track = songs[index].play(&endpoint, &mut basic_ui);
 	});
 	let mut beat_time = Instant::now();
 
@@ -267,7 +268,7 @@ fn main() {
 								} else {
 									index - 1
 								};
-								songs[index].play(&mut music_track, &mut basic_ui);
+								music_track = songs[index].play(&endpoint, &mut basic_ui);
 								beat_time = Instant::now();
 								index
 							});
@@ -275,7 +276,7 @@ fn main() {
 						Some(Scancode::K) => {
 							curr_song_index = curr_song_index.map(|index| {
 								let index = (index + 1) % songs.len();
-								songs[index].play(&mut music_track, &mut basic_ui);
+								music_track = songs[index].play(&endpoint, &mut basic_ui);
 								beat_time = Instant::now();
 								index
 							});
@@ -515,10 +516,8 @@ impl Song {
 		}
 	}
 
-	// TODO
-	fn play<T: UiLayout>(&self, sink: &mut Sink, ui: &mut T) {
-		sink.stop();
-		std::mem::replace(sink, Sink::new(&rodio::default_endpoint().unwrap()));
+	fn play<T: UiLayout>(&self, endpoint: &Endpoint, ui: &mut T) -> Sink {
+		let sink = Sink::new(endpoint);
 		if let Some(ref buildup) = self.buildup_audio {
 			sink.append(buildup.clone());
 		}
@@ -526,6 +525,8 @@ impl Song {
 		sink.append(self.loop_audio.clone().repeat_infinite());
 
 		ui.update_song(&self.title);
+
+		sink
 	}
 }
 

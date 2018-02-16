@@ -15,10 +15,13 @@ use xml::reader::{EventReader, XmlEvent};
 use rodio::source::{Source};
 
 
+use sdl2::rwops::RWops;
+use sdl2::image::ImageRWops;
 //use sdl2::surface::SurfaceContext;
 
 use mp3::Mp3Decoder;
 use Song;
+use surface::Surface;
 
 pub enum LoadStatus {
 	TotalSize(u64),
@@ -36,13 +39,13 @@ pub struct ImageLoader {
 	//data: SurfaceContext
 	pub name: String,
 	pub fullname: Option<String>,
-	pub data: Vec<u8>,
+	pub data: Surface,
 	pub source: Option<String>,
 	pub source_other: Option<String>,
 }
 
 impl ImageLoader {
-	fn new(name: &str, buffer: Vec<u8>) -> Self {
+	fn new(name: &str, buffer: Surface) -> Self {
 		ImageLoader {
 			name: name.to_owned(),
 			data: buffer,
@@ -89,23 +92,17 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 		let name = path.file_stem().unwrap().to_str().unwrap();
 		match path.extension().and_then(OsStr::to_str) {
 			Some("png") => {
-				let buffer = {
+				let surface = {
 					let mut buffer = Vec::with_capacity(file.size() as usize);
 					file.read_to_end(&mut buffer).unwrap();
 
-					// TODO: some hackery with surfacecontext which I shouldn't use
-					//{
-					//	let rwops = RWops::from_bytes(&buffer[..]).unwrap();
-					//	let surface = rwops.load_png().unwrap();
-					//	surface.context()
-					//}.try_unwrap().unwrap()
-					// so hopefully, the rc context makes it alive out of the block, while the surface is dropped
-					// so this should be the only reference to it.. right?
-
-					buffer
+					let rwops = RWops::from_bytes(&buffer[..]).unwrap();
+					let surface = rwops.load_png().unwrap();
+					
+					Surface::from_surface(surface).unwrap()
 				};
 
-				let image = ImageLoader::new(name, buffer);
+				let image = ImageLoader::new(name, surface);
 
 				images.insert(name.to_owned(), image);
 			},

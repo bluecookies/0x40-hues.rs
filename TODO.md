@@ -12,6 +12,8 @@ Medium priority
 	- use the align tag in the xml
 - Beatmap editor
 
+- Blackout screen when changing songs
+
 
 Low priority
 - When images shuffle, make sure they change
