@@ -1,6 +1,5 @@
 High priority
 - Don't stretch images - render centered
-- Change songs
 - Dynamic load respacks
 - Display beats
 

@@ -13,6 +13,7 @@ use std::time::{Instant, Duration};
 use sdl2::pixels::{Color as Colour, PixelFormatEnum};
 use sdl2::rect::Rect;
 use sdl2::event::Event;
+use sdl2::keyboard::Scancode;
 use sdl2::render::{Texture, BlendMode, Canvas, RenderTarget};
 use sdl2::rwops::RWops;
 use sdl2::surface::Surface;
@@ -118,8 +119,6 @@ fn main() {
 	// Events
 	let mut event_pump = sdl_context.event_pump().unwrap();
 
-	sdl2::hint::set("SDL_RENDER_SCALE_QUALITY", "1");
-
 	canvas.set_draw_color(Colour::RGB(0xFF, 0xFF, 0xFF));
 	canvas.set_blend_mode(BlendMode::Blend);
 	canvas.clear();
@@ -129,11 +128,9 @@ fn main() {
 	let mut rng = rand::thread_rng();
 	let rng = &mut rng;
 
+	// 
 	let mut images: Vec<Image> = Vec::new();
-
 	let mut songs: Vec<Song> = Vec::new();
-	//let mut song_index: Option<usize> = None;
-	let mut curr_song;	// = None;
 	
 	// Load resources
 	let respacks = vec!["CharPackagev0.03", "Defaults_v5.0", "osuPack"];
@@ -219,7 +216,7 @@ fn main() {
 		return;
 	}
 
-	let beat_time = Instant::now();
+	//
 	let mut beat_index = BeatIndex::Buildup(100);	// Uh - ignore this - fix later
 	let mut curr_colour = Colour::RGBA(0x00, 0x00, 0x00, 0xFF);
 
@@ -232,32 +229,28 @@ fn main() {
 		texture_creator.create_texture_from_surface(surface).unwrap()
 	};
 
-	//let mut curr_image = rng.choose_mut(&mut images).unwrap();
-	let mut curr_image_index = rng.gen_range(0, images.len());
-
 	let mut frame_timer = Instant::now();
 	let mut num_frames = 0;
 
 	canvas.set_draw_color(curr_colour);
 
 	let mut basic_ui = ui::BasicUi::new(&font, &texture_creator);
-	basic_ui.update_image(&images[curr_image_index].name);
-
 
 	// Temp
-	let sink = Sink::new(&rodio::default_endpoint().unwrap());
+	let mut curr_image_index = rng.gen_range(0, images.len());
+	basic_ui.update_image(&images[curr_image_index].name);
+
+	// TODO: figure out how to do this without dropping the sink everytime
+	let mut music_track = Sink::new(&rodio::default_endpoint().unwrap());
 	//"DJ Genericname - Dear you"
 	//"Vexare - The Clockmaker"
-	if let Some(index) = get_song_index(&songs, "DJ Genericname - Dear you") {
-		songs[index].play(&sink);
-		curr_song = Some(&songs[index]);
-		basic_ui.update_song(&songs[index].title);
-	} else {
-		let index = rng.gen_range(0, songs.len());
-		songs[index].play(&sink);
-		curr_song = Some(&songs[index]);
-		basic_ui.update_song(&songs[index].title);
-	}
+	let mut curr_song_index = get_song_index(&songs, "DJ Genericname - Dear you").or_else(|| {
+		Some(rng.gen_range(0, songs.len()))
+	});
+	curr_song_index.map(|index| {
+		songs[index].play(&mut music_track, &mut basic_ui);
+	});
+	let mut beat_time = Instant::now();
 
 	'running: loop {
 		for event in event_pump.poll_iter() {
@@ -265,10 +258,37 @@ fn main() {
 				Event::Quit{..} => {
 					break 'running;
 				},
+				Event::KeyDown { scancode, .. } => {
+					match scancode {
+						Some(Scancode::J) => {
+							curr_song_index = curr_song_index.map(|index| {
+								let index = if index == 0 {
+									songs.len() - 1
+								} else {
+									index - 1
+								};
+								songs[index].play(&mut music_track, &mut basic_ui);
+								beat_time = Instant::now();
+								index
+							});
+						},
+						Some(Scancode::K) => {
+							curr_song_index = curr_song_index.map(|index| {
+								let index = (index + 1) % songs.len();
+								songs[index].play(&mut music_track, &mut basic_ui);
+								beat_time = Instant::now();
+								index
+							});
+						},
+						_ => {}						
+					}
+				}
 				_ => {}
 			}
 		}
-		if let Some(song) = curr_song {
+		curr_song_index.map(|index| {
+			let song = &songs[index];
+
 			let new_index = song.get_beat_index(beat_time.elapsed());
 			if new_index != beat_index {
 				match song.get_beat(new_index) {
@@ -336,7 +356,7 @@ fn main() {
 				basic_ui.update_time(beat_time as i32);
 				basic_ui.update_beat(beat_index);
 			}
-		}
+		});
 		canvas.clear();
 
 		// Draw image
@@ -495,12 +515,17 @@ impl Song {
 		}
 	}
 
-	fn play(&self, sink: &Sink) {
+	// TODO
+	fn play<T: UiLayout>(&self, sink: &mut Sink, ui: &mut T) {
+		sink.stop();
+		std::mem::replace(sink, Sink::new(&rodio::default_endpoint().unwrap()));
 		if let Some(ref buildup) = self.buildup_audio {
 			sink.append(buildup.clone());
 		}
 
 		sink.append(self.loop_audio.clone().repeat_infinite());
+
+		ui.update_song(&self.title);
 	}
 }
 
