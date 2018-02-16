@@ -13,3 +13,6 @@ rand = "0.4"
 [dependencies.sdl2]
 features = ["use_mac_framework", "mixer", "image", "ttf", "unsafe_textures"]
 version = "0.31.0"
+
+[profile.dev]
+opt-level = 1
