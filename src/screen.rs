@@ -12,6 +12,7 @@ use duration_to_secs;
 pub struct Screen {
 	colour: Colour,
 
+	full_black: bool,
 	blackout_init: Option<Instant>,
 	blackout_texture: Texture,
 }
@@ -20,6 +21,9 @@ impl Screen {
 	pub fn new<T>(texture_creator: &TextureCreator<T>) -> Self {
 		Screen {
 			colour: Colour::RGBA(0x00, 0x00, 0x00, 0xFF),
+
+			// Don't start off with an actual blackout
+			full_black: false,
 			blackout_init: None,
 			blackout_texture: {
 				// unsure whether large or small texture is good
@@ -52,13 +56,24 @@ impl Screen {
 
 	pub fn clear_blackout(&mut self) {
 		self.blackout_init = None;
+		self.full_black = false;
 	}
 
 	pub fn blackout(&mut self) {
 		self.blackout_init = Some(Instant::now());
 	}
 
+	pub fn short_blackout(&mut self) {
+		self.full_black = true;
+	}
+
 	pub fn draw(&mut self, canvas: &mut Canvas) {
+		if self.full_black {
+			canvas.set_draw_color(Colour::RGB(0x00, 0x00, 0x00));
+			canvas.fill_rect(None).unwrap();
+			return;
+		}
+
 		if let Some(start) = self.blackout_init {
 			let fade = duration_to_secs(start.elapsed()) * 10.0;
 			// Maybe set a flag to check before drawing image

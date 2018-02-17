@@ -1,11 +1,16 @@
+#[macro_use]
+extern crate serde_derive;
 extern crate glob;
 extern crate rand;
 extern crate rodio;
 extern crate sdl2;
 extern crate zip;
+extern crate toml;
 
 use std::thread;
 use std::sync::mpsc::channel;
+use std::fs::File;
+use std::io::Read;
 
 use std::time::{Duration, Instant};
 use std::ffi::OsStr;
@@ -34,7 +39,8 @@ use images::ImageManager;
 use songs::SongManager;
 use screen::Screen;
 
-type Result<T> = std::result::Result<T, Box<std::error::Error>>;
+type Error = Box<std::error::Error>;
+type Result<T> = std::result::Result<T, Error>;
 type AudioData = Buffered<Box<Source<Item = i16> + Send>>;
 
 fn main() {
@@ -75,12 +81,24 @@ fn main() {
 	let mut image_manager = ImageManager::new(&texture_creator);
 	let mut song_manager = SongManager::new();
 
+	// Config
+	let config: Option<Config> = File::open("config.toml").map_err(Error::from).and_then(|mut config_file| {
+		let mut config_string = String::new();
+		config_file.read_to_string(&mut config_string)?;
+		Ok(config_string)
+	}).and_then(|cfg| toml::from_str::<Config>(&cfg).map_err(|err| format!("	{}", err).into())).ok();
+
 	// Load resources
-	let respacks = glob("respacks/*.zip")
-		.expect("Could not do this")
-		.filter_map(std::result::Result::ok)
-		.filter_map(|path| path.file_stem().and_then(OsStr::to_str).map(str::to_owned))	// and_then is a flatmap
-		.collect::<Vec<String>>();
+	// this feels kinda hacky - maybe I rewrite later
+	let respacks = if let Some(Config { respacks: Some(ref packs), .. }) = config {
+		packs.clone()
+	} else {
+		glob("respacks/*.zip")
+			.expect("Could not do this")
+			.filter_map(std::result::Result::ok)
+			.filter_map(|path| path.file_stem().and_then(OsStr::to_str).map(str::to_owned))	// and_then is a flatmap
+			.collect::<Vec<String>>()
+	};
 
 	let mut remaining_packs = respacks.len();
 
@@ -88,7 +106,7 @@ fn main() {
 	for packname in respacks.iter() {
 		let tx = tx.clone();
 		let path = format!("respacks/{}.zip", packname);
-		thread::spawn(move || loader::load_respack(path, tx));
+		thread::spawn(move || loader::load_respack(path, tx).map_err(|err| println!("Error loading pack: {}", err)));
 		println!("Loading {}", packname);
 	}
 
@@ -152,9 +170,10 @@ fn main() {
 
 	image_manager.random_image(&mut basic_ui);
 
-	song_manager
-		.play_song("DJ Genericname - Dear you", &mut basic_ui)
-		.unwrap_or_else(|_err| song_manager.play_random(&mut basic_ui));
+	match config {
+		Some(Config { song: Some(song), .. }) => song_manager.play_song(song, &mut basic_ui).ok(),
+		_ => None
+	}.unwrap_or_else(|| song_manager.play_random(&mut basic_ui));
 
 	'running: loop {
 		for event in event_pump.poll_iter() {
@@ -196,12 +215,18 @@ fn main() {
 		if num_frames == 200 {
 			let duration = frame_timer.elapsed();
 			// #frames per second = num_frames / duration as secs
-			println!("FPS: {}", num_frames as f64 / duration_to_secs(duration));
+			println!("FPS: {:.3}", num_frames as f64 / duration_to_secs(duration));
 
 			frame_timer = Instant::now();
 			num_frames = 0;
 		}
 	}
+}
+
+#[derive(Deserialize, Debug)]
+struct Config {
+	respacks: Option<Vec<String>>,
+	song: Option<String>
 }
 
 fn _duration_to_millis(d: Duration) -> f64 {

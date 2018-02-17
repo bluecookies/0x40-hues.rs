@@ -183,7 +183,21 @@ impl SongManager {
 						screen.clear_blackout();
 					}
 					b'+' => {
+						// blur x?
+						image_manager.blur_x(ui);
 						screen.blackout();
+					}
+					b'|' => {
+						screen.short_blackout();
+						screen.random_colour(ui);
+
+						// check this
+						image_manager.random_image(ui);
+					}
+					b'*' => {
+						image_manager.random_image(ui);
+
+						screen.clear_blackout();
 					}
 					b'=' => {
 						image_manager.random_image(ui);

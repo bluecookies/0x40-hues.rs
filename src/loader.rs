@@ -82,12 +82,12 @@ struct ImageData {
 	// frameDuration
 }
 
-pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
-	let f = File::open(path.as_ref()).unwrap();
-	let total_size = f.metadata().unwrap().len();
-	tx.send(LoadStatus::TotalSize(total_size)).unwrap();
+pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) -> Result<()> {
+	let f = File::open(path.as_ref())?;
+	let total_size = f.metadata()?.len();
+	tx.send(LoadStatus::TotalSize(total_size))?;
 
-	let mut archive = ZipArchive::new(f).unwrap();
+	let mut archive = ZipArchive::new(f)?;
 
 	let mut images: HashMap<String, ImageLoader> = HashMap::new();
 	let mut audio: HashMap<String, _> = HashMap::new();
@@ -95,21 +95,21 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 	let mut song_data = Vec::new();
 	let mut image_data = Vec::new();
 	for i in 0..archive.len() {
-		let mut file = archive.by_index(i).unwrap();
+		let mut file = archive.by_index(i)?;
 		let path: PathBuf = file.name().into();
 
 		let size = file.compressed_size();
-		let name = path.file_stem().unwrap().to_str().unwrap();
+		let name: &str = path.file_stem().and_then(OsStr::to_str).ok_or_else(|| "Bad path")?;
 		match path.extension().and_then(OsStr::to_str) {
 			Some("png") => {
 				let surface = {
 					let mut buffer = Vec::with_capacity(file.size() as usize);
-					file.read_to_end(&mut buffer).unwrap();
+					file.read_to_end(&mut buffer)?;
 
-					let rwops = RWops::from_bytes(&buffer[..]).unwrap();
-					let surface = rwops.load_png().unwrap();
+					let rwops = RWops::from_bytes(&buffer[..])?;
+					let surface = rwops.load_png()?;
 
-					Surface::from_surface(surface).unwrap()
+					Surface::from_surface(surface)?
 				};
 
 				let image = ImageLoader::new(name, surface);
@@ -118,7 +118,7 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 			}
 			Some("mp3") => {
 				let mut data = Vec::with_capacity(file.size() as usize);
-				file.read_to_end(&mut data).unwrap();
+				file.read_to_end(&mut data)?;
 
 				let decoder = Mp3Decoder::new(Cursor::new(data));
 				let source = (Box::new(decoder) as Box<Source<Item = i16> + Send>).buffered();
@@ -129,7 +129,7 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 			}
 			_ => println!("{:?}", path),
 		}
-		tx.send(LoadStatus::LoadSize(size)).unwrap();
+		tx.send(LoadStatus::LoadSize(size))?;
 	}
 
 	// Process songs
@@ -154,7 +154,9 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 	tx.send(LoadStatus::Done(ResPack {
 		images: images.into_iter().map(|(_k, v)| v).collect(),
 		songs,
-	})).unwrap();
+	}))?;
+
+	Ok(())
 }
 
 //XML
