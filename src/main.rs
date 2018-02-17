@@ -72,7 +72,6 @@ fn main() {
 	canvas.clear();
 	canvas.present();
 
-	//
 	let mut image_manager = ImageManager::new(&texture_creator);
 	let mut song_manager = SongManager::new();
 
