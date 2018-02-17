@@ -1,21 +1,23 @@
+extern crate glob;
+extern crate rand;
+extern crate rodio;
 extern crate sdl2;
 extern crate zip;
-extern crate rodio;
-extern crate xml;
-extern crate rand;
 
 use std::thread;
-use std::sync::mpsc::{channel};
+use std::sync::mpsc::channel;
 
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
+use std::ffi::OsStr;
 
-
-use sdl2::pixels::{Color as Colour};
+use sdl2::pixels::Color as Colour;
 use sdl2::event::Event;
 use sdl2::keyboard::Scancode;
-use sdl2::render::{BlendMode};
+use sdl2::render::BlendMode;
 
-use rodio::source::{Source, Buffered, Zero as ZeroSource};
+use rodio::source::{Buffered, Source};
+
+use glob::glob;
 
 mod mp3;
 mod loader;
@@ -35,24 +37,19 @@ use screen::Screen;
 type Result<T> = std::result::Result<T, Box<std::error::Error>>;
 type AudioData = Buffered<Box<Source<Item = i16> + Send>>;
 
-fn empty_audio() -> AudioData {
-	let source = Box::new(ZeroSource::new(2, 44100)) as Box<Source<Item = i16> + Send>;
-	source.buffered()
-}
-
-
 fn main() {
 	let sdl_context = sdl2::init().unwrap();
 	let video_subsystem = sdl_context.video().unwrap();
 	let _audio_subsystem = sdl_context.audio().unwrap();
 
-	let window = video_subsystem.window("0x40-hues.rs", 1280, 720)
+	let window = video_subsystem
+		.window("0x40-hues.rs", 1280, 720)
 		.position_centered()
 		.build()
 		.unwrap();
 
 	sdl2::hint::set("SDL_RENDER_VSYNC", "1");
- 
+
 	let mut canvas = window.into_canvas().build().unwrap();
 	let texture_creator = canvas.texture_creator();
 
@@ -63,8 +60,10 @@ fn main() {
 	sdl2::image::init(sdl2::image::INIT_PNG).expect("Could not init png");
 
 	// Font
-	let font = ttf_context.load_font("respacks/PetMe64.ttf", 12).expect("Could not load font");
-	
+	let font = ttf_context
+		.load_font("respacks/PetMe64.ttf", 12)
+		.expect("Could not load font");
+
 	// Events
 	let mut event_pump = sdl_context.event_pump().unwrap();
 
@@ -73,12 +72,17 @@ fn main() {
 	canvas.clear();
 	canvas.present();
 
-	// 
+	//
 	let mut image_manager = ImageManager::new(&texture_creator);
 	let mut song_manager = SongManager::new();
-	
+
 	// Load resources
-	let respacks = vec!["CharPackagev0.03", "Defaults_v5.0", "osuPack"];
+	let respacks = glob("respacks/*.zip")
+		.expect("Could not do this")
+		.filter_map(std::result::Result::ok)
+		.filter_map(|path| path.file_stem().and_then(OsStr::to_str).map(str::to_owned))	// and_then is a flatmap
+		.collect::<Vec<String>>();
+
 	let mut remaining_packs = respacks.len();
 
 	let (tx, rx) = channel();
@@ -106,11 +110,11 @@ fn main() {
 			Ok(LoadStatus::TotalSize(size)) => {
 				total_size += size;
 				changed = true;
-			},
+			}
 			Ok(LoadStatus::LoadSize(size)) => {
 				loaded_size += size;
 				changed = true;
-			},
+			}
 			Ok(LoadStatus::Done(pack)) => {
 				image_manager.extend(pack.images);
 				song_manager.extend(pack.songs);
@@ -149,26 +153,24 @@ fn main() {
 
 	image_manager.random_image(&mut basic_ui);
 
-	//"DJ Genericname - Dear you"
-	//"Vexare - The Clockmaker"
-	song_manager.play_song("DJ Genericname - Dear you", &mut basic_ui).unwrap_or_else(|_err| song_manager.play_random(&mut basic_ui));
+	song_manager
+		.play_song("DJ Genericname - Dear you", &mut basic_ui)
+		.unwrap_or_else(|_err| song_manager.play_random(&mut basic_ui));
 
 	'running: loop {
 		for event in event_pump.poll_iter() {
 			match event {
-				Event::Quit{..} => {
+				Event::Quit { .. } => {
 					break 'running;
-				},
-				Event::KeyDown { scancode, .. } => {
-					match scancode {
-						Some(Scancode::F) => image_manager.toggle_full_auto(&mut basic_ui),
-						Some(Scancode::J) => song_manager.prev_song(&mut basic_ui),
-						Some(Scancode::K) => song_manager.next_song(&mut basic_ui),
-						Some(Scancode::N) => image_manager.prev_image(&mut basic_ui),
-						Some(Scancode::M) => image_manager.next_image(&mut basic_ui),
-						_ => {}						
-					}
 				}
+				Event::KeyDown { scancode, .. } => match scancode {
+					Some(Scancode::F) => image_manager.toggle_full_auto(&mut basic_ui),
+					Some(Scancode::J) => song_manager.prev_song(&mut basic_ui),
+					Some(Scancode::K) => song_manager.next_song(&mut basic_ui),
+					Some(Scancode::N) => image_manager.prev_image(&mut basic_ui),
+					Some(Scancode::M) => image_manager.next_image(&mut basic_ui),
+					_ => {}
+				},
 				_ => {}
 			}
 		}
@@ -185,8 +187,8 @@ fn main() {
 		basic_ui.draw(&mut canvas).unwrap();
 
 		// Overlay blackout
-		screen.draw(&mut canvas);	// maybe make screen draw the image and ui too
-		// maybe make the screen hold the canvas
+		screen.draw(&mut canvas); // maybe make screen draw the image and ui too
+							// maybe make the screen hold the canvas
 
 		canvas.present();
 

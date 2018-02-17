@@ -1,19 +1,19 @@
+extern crate xml;
+
 use std;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::ffi::OsStr;
-use std::io::{Read, Cursor, BufReader};
+use std::io::{BufReader, Cursor, Read};
 
 use std::sync::mpsc::Sender;
 
 use std::collections::HashMap;
-use std::time::{Duration};
 
 use zip::read::{ZipArchive, ZipFile};
-use xml::reader::{EventReader, XmlEvent};
-use rodio::source::{Source};
-
+use loader::xml::reader::{EventReader, XmlEvent};
+use rodio::source::Source;
 
 use sdl2::rwops::RWops;
 use sdl2::image::ImageRWops;
@@ -22,11 +22,12 @@ use sdl2::image::ImageRWops;
 use mp3::Mp3Decoder;
 use songs::Song;
 use surface::Surface;
+use Result;
 
 pub enum LoadStatus {
 	TotalSize(u64),
 	LoadSize(u64),
-	Done(ResPack)
+	Done(ResPack),
 }
 
 // SDL2-rust implementation of surface isn't threadsafe for some reason
@@ -42,6 +43,16 @@ pub struct ImageLoader {
 	pub data: Surface,
 	pub source: Option<String>,
 	pub source_other: Option<String>,
+}
+
+pub struct SongData {
+	pub name: String,
+	pub title: String,
+	pub source: Option<String>,
+	pub rhythm: Vec<u8>,
+
+	pub buildup: Option<String>,
+	pub buildup_rhythm: Vec<u8>,
 }
 
 impl ImageLoader {
@@ -71,7 +82,6 @@ struct ImageData {
 	// frameDuration
 }
 
-
 pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 	let f = File::open(path.as_ref()).unwrap();
 	let total_size = f.metadata().unwrap().len();
@@ -82,7 +92,7 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 	let mut images: HashMap<String, ImageLoader> = HashMap::new();
 	let mut audio: HashMap<String, _> = HashMap::new();
 
-	let mut songs = Vec::new();
+	let mut song_data = Vec::new();
 	let mut image_data = Vec::new();
 	for i in 0..archive.len() {
 		let mut file = archive.by_index(i).unwrap();
@@ -98,67 +108,36 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 
 					let rwops = RWops::from_bytes(&buffer[..]).unwrap();
 					let surface = rwops.load_png().unwrap();
-					
+
 					Surface::from_surface(surface).unwrap()
 				};
 
 				let image = ImageLoader::new(name, surface);
 
 				images.insert(name.to_owned(), image);
-			},
+			}
 			Some("mp3") => {
 				let mut data = Vec::with_capacity(file.size() as usize);
 				file.read_to_end(&mut data).unwrap();
 
-				audio.insert(name.to_owned(), Mp3Decoder::new(Cursor::new(data)));
-			},
+				let decoder = Mp3Decoder::new(Cursor::new(data));
+				let source = (Box::new(decoder) as Box<Source<Item = i16> + Send>).buffered();
+				audio.insert(name.to_owned(), source);
+			}
 			Some("xml") => {
-				match name {
-					"songs" => {
-						songs = parse_song_xml(file);
-					},
-					"images" => {
-						image_data = parse_image_xml(file);
-					},
-					_ => println!("{:?}.xml", name),
-				}
-			},
-			_ => println!("{:?}", path)
+				parse_xml(file, &mut song_data, &mut image_data);
+			}
+			_ => println!("{:?}", path),
 		}
 		tx.send(LoadStatus::LoadSize(size)).unwrap();
 	}
 
 	// Process songs
-	// Calculate beat length/buildup duration + fill in blank buildups
+	let songs: Vec<Song> = song_data
+		.into_iter()
+		.filter_map(|data| Song::new(data, &mut audio).ok())
+		.collect();
 
-	// TODO: drain filter out the bad ones
-	// TODO: move to song loader - can scrap out name and buildup name in Song, scrap durations in loader
-	for song in songs.iter_mut() {
-		if let Some(decoder) = audio.remove(&song.name) {
-			song.loop_duration = decoder.total_duration().unwrap();
-			song.loop_beat_length = song.loop_duration/song.rhythm.len() as u32;
-
-			let source = Box::new(decoder) as Box<Source<Item = i16> + Send>;
-			song.loop_audio = source.buffered();
-		} else {
-			println!("Error: Could not find song {}", &song.name);
-		}
-
-		if let Some(ref buildup) = song.buildup {
-			if let Some(decoder) = audio.remove(buildup) {
-				song.buildup_duration = decoder.total_duration().unwrap();
-				if song.buildup_rhythm.is_empty() {
-					song.buildup_rhythm.push(b'.');
-				}
-				song.buildup_beat_length = song.buildup_duration/song.buildup_rhythm.len() as u32;
-
-				let source = Box::new(decoder) as Box<Source<Item = i16> + Send>;
-				song.buildup_audio = Some(source.buffered());
-			} else {
-				println!("Error: Could not find song {}", buildup);
-			}
-		}
-	}
 	if !audio.is_empty() {
 		println!("Warning: Unused audio data {:?}", audio.keys());
 	}
@@ -174,33 +153,41 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) {
 
 	tx.send(LoadStatus::Done(ResPack {
 		images: images.into_iter().map(|(_k, v)| v).collect(),
-		songs
+		songs,
 	})).unwrap();
 }
 
+//XML
+enum State {
+	Document,
+	Songs,
+	Song(Option<SongField>),
+	Images,
+	Image(Option<ImageField>),
+}
+#[derive(Copy, Clone, Debug)]
+enum SongField {
+	Title,
+	Source,
+	Rhythm,
+	Buildup,
+	BuildupRhythm,
+}
+#[derive(Copy, Clone, Debug)]
+enum ImageField {
+	Source,
+	SourceOther,
+	FullName,
+	Align,
+	FrameDuration, // TODO: handle animations
+}
 
 // based off code from stebalien on rust-lang
-fn parse_song_xml(file: ZipFile) -> Vec<Song> {
-	enum State {
-		Start,
-		Songs,
-		Song(Option<SongField>),
-		End,
-	}
-	#[derive(Copy, Clone, Debug)]
-	enum SongField {
-		Title,
-		Source,
-		Rhythm,
-		Buildup,
-		BuildupRhythm,
-	}
-
-	let mut songs = Vec::new();
-
+// ok this got ugly, clean it up
+fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageData>) {
 	let mut reader = EventReader::new(BufReader::new(file));
 
-	let mut state = State::Start;
+	let mut state = State::Document;
 
 	let mut song_name = None;
 	let mut song_title = None;
@@ -209,19 +196,33 @@ fn parse_song_xml(file: ZipFile) -> Vec<Song> {
 	let mut song_buildup = None;
 	let mut song_buildup_rhythm = Vec::new();
 
+	let mut image_filename = None;
+	let mut image_name = None;
+	let mut image_source = None;
+	let mut image_source_other = None;
+	// TODO: handle smart align
+	//let mut image_align = None;
+
 	while let Ok(event) = reader.next() {
 		state = match state {
-			State::Start => match event {
-				XmlEvent::StartDocument { .. } => State::Start,
-				XmlEvent::StartElement { ref name, .. } if name.local_name == "songs" => State::Songs,
-				_ => panic!("Expected songs tag")
-			},
-			State::End => match event {
+			State::Document => match event {
+				XmlEvent::StartDocument { .. } => State::Document,
+				XmlEvent::StartElement { name, .. } => match name.local_name.as_ref() {
+					"songs" => State::Songs,
+					"images" => State::Images,
+					_ => {
+						println!("Unknown xml tag {}", name.local_name);
+						xml_skip_tag(&mut reader).unwrap();
+						State::Document
+					}
+				},
 				XmlEvent::EndDocument => break,
-				_ => panic!("Expected eof")
+				_ => panic!("Unexpected"),
 			},
 			State::Songs => match event {
-				XmlEvent::StartElement { name, attributes, .. } => {
+				XmlEvent::StartElement {
+					name, attributes, ..
+				} => {
 					if name.local_name != "song" {
 						panic!("Expected a song tag - got {}", name.local_name);
 					}
@@ -238,10 +239,10 @@ fn parse_song_xml(file: ZipFile) -> Vec<Song> {
 					}
 
 					State::Song(None)
-				},
-				XmlEvent::EndElement { .. } => State::End,
+				}
+				XmlEvent::EndElement { .. } => State::Document,
 				XmlEvent::Whitespace(_) => State::Songs,
-				_ => panic!("Expected a song tag - got {:?}", event)
+				_ => panic!("Expected a song tag - got {:?}", event),
 			},
 			State::Song(None) => match event {
 				XmlEvent::StartElement { ref name, .. } => match name.local_name.as_ref() {
@@ -250,35 +251,30 @@ fn parse_song_xml(file: ZipFile) -> Vec<Song> {
 					"rhythm" => State::Song(Some(SongField::Rhythm)),
 					"buildup" => State::Song(Some(SongField::Buildup)),
 					"buildupRhythm" => State::Song(Some(SongField::BuildupRhythm)),
-					_ => panic!("Unknown song field {}", name.local_name)
+					_ => {
+						println!("Unknown song field {}", name.local_name);
+						xml_skip_tag(&mut reader).unwrap();
+						State::Song(None)
+					}
 				},
 				XmlEvent::EndElement { .. } => {
 					if song_rhythm.is_empty() {
 						panic!("Empty rhythm");
 					}
 
-					let song = Song {
+					let song = SongData {
 						name: song_name.take().unwrap(),
 						title: song_title.take().unwrap(),
 						source: song_source.take(),
 						rhythm: std::mem::replace(&mut song_rhythm, Vec::new()),
 						buildup: song_buildup.take(),
 						buildup_rhythm: std::mem::replace(&mut song_buildup_rhythm, Vec::new()),
-
-						loop_beat_length: Duration::new(0, 0),
-						buildup_beat_length: Duration::new(0, 0),
-
-						loop_duration: Duration::new(0, 0),
-						buildup_duration: Duration::new(0, 0),
-
-						loop_audio: ::empty_audio(),
-						buildup_audio: None,
 					};
 
 					songs.push(song);
 					State::Songs
-				},
-				_ => State::Song(None)
+				}
+				_ => State::Song(None),
 			},
 			State::Song(Some(field)) => match event {
 				XmlEvent::Characters(data) => {
@@ -290,7 +286,7 @@ fn parse_song_xml(file: ZipFile) -> Vec<Song> {
 								panic!("Expected ascii characters in rhythm");
 							}
 							song_rhythm = data.into_bytes();
-						},
+						}
 						SongField::Buildup => song_buildup = Some(data),
 						SongField::BuildupRhythm => {
 							if !data.is_ascii() {
@@ -303,59 +299,14 @@ fn parse_song_xml(file: ZipFile) -> Vec<Song> {
 						}
 					}
 					State::Song(Some(field))
-				},
+				}
 				XmlEvent::EndElement { .. } => State::Song(None),
-				_ => panic!("Expected data for tag {:?}", field)
-			}
-		}
-	}
-
-	return songs;
-}
-
-fn parse_image_xml(file: ZipFile) -> Vec<ImageData> {
-	enum State {
-		Start,
-		Images,
-		Image(Option<ImageField>),
-		End,
-	}
-	#[derive(Copy, Clone, Debug)]
-	enum ImageField {
-		Source,
-		SourceOther,
-		FullName,
-		Align,
-		FrameDuration,	// TODO: handle animations
-	}
-
-	let mut images = Vec::new();
-
-	let mut reader = EventReader::new(BufReader::new(file));
-
-	let mut state = State::Start;
-
-	let mut image_filename = None;
-	let mut image_name = None;
-	let mut image_source = None;
-	let mut image_source_other = None;
-	
-	// TODO: handle smart align
-	//let mut image_align = None;
-
-	while let Ok(event) = reader.next() {
-		state = match state {
-			State::Start => match event {
-				XmlEvent::StartDocument { .. } => State::Start,
-				XmlEvent::StartElement { ref name, .. } if name.local_name == "images" => State::Images,
-				_ => panic!("Expected images tag")
-			},
-			State::End => match event {
-				XmlEvent::EndDocument => break,
-				_ => panic!("Expected eof")
+				_ => panic!("Expected data for tag {:?}", field),
 			},
 			State::Images => match event {
-				XmlEvent::StartElement { name, attributes, .. } => {
+				XmlEvent::StartElement {
+					name, attributes, ..
+				} => {
 					if name.local_name != "image" {
 						panic!("Expected an image tag - got {}", name.local_name);
 					}
@@ -372,10 +323,10 @@ fn parse_image_xml(file: ZipFile) -> Vec<ImageData> {
 					}
 
 					State::Image(None)
-				},
-				XmlEvent::EndElement { .. } => State::End,
+				}
+				XmlEvent::EndElement { .. } => State::Document,
 				XmlEvent::Whitespace(_) => State::Images,
-				_ => panic!("Expected an image tag - got {:?}", event)
+				_ => panic!("Expected an image tag - got {:?}", event),
 			},
 			State::Image(None) => match event {
 				XmlEvent::StartElement { ref name, .. } => match name.local_name.as_ref() {
@@ -384,7 +335,11 @@ fn parse_image_xml(file: ZipFile) -> Vec<ImageData> {
 					"fullname" => State::Image(Some(ImageField::FullName)),
 					"align" => State::Image(Some(ImageField::Align)),
 					"frameDuration" => State::Image(Some(ImageField::FrameDuration)),
-					_ => panic!("Unknown image field {}", name.local_name)
+					_ => {
+						println!("Unknown image field {}", name.local_name);
+						xml_skip_tag(&mut reader).unwrap();
+						State::Image(None)
+					}
 				},
 				XmlEvent::EndElement { .. } => {
 					let image = ImageData {
@@ -396,8 +351,8 @@ fn parse_image_xml(file: ZipFile) -> Vec<ImageData> {
 
 					images.push(image);
 					State::Images
-				},
-				_ => State::Image(None)
+				}
+				_ => State::Image(None),
 			},
 			State::Image(Some(field)) => match event {
 				XmlEvent::Characters(data) => {
@@ -405,16 +360,27 @@ fn parse_image_xml(file: ZipFile) -> Vec<ImageData> {
 						ImageField::Source => image_source = Some(data),
 						ImageField::SourceOther => image_source_other = Some(data),
 						ImageField::FullName => image_name = Some(data),
-						ImageField::Align => {},
-						ImageField::FrameDuration => {},
+						ImageField::Align => {}
+						ImageField::FrameDuration => {}
 					}
 					State::Image(Some(field))
-				},
+				}
 				XmlEvent::EndElement { .. } => State::Image(None),
-				_ => panic!("Expected data for tag {:?}", field)
-			}
+				_ => panic!("Expected data for tag {:?}", field),
+			},
 		}
 	}
+}
 
-	return images;
+fn xml_skip_tag<R: Read>(reader: &mut EventReader<R>) -> Result<()> {
+	let mut depth = 1;
+	while depth > 0 {
+		match reader.next() {
+			Ok(XmlEvent::StartElement { .. }) => depth += 1,
+			Ok(XmlEvent::EndElement { .. }) => depth -= 1,
+			Ok(_event) => {}
+			_ => return Err("Unexpected event error".into()),
+		}
+	}
+	Ok(())
 }

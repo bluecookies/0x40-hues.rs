@@ -17,11 +17,11 @@ use std::ptr::copy_nonoverlapping as memcpy;
 
 use std::os::raw::c_int;
 
-use sdl2::surface::{SurfaceRef, Surface as STSurface};
+use sdl2::surface::{Surface as STSurface, SurfaceRef};
 use sdl2::sys;
 use sdl2::get_error as sdl_get_error;
 
-use ::Result;
+use Result;
 
 // static
 // wait why don't I just own this then
@@ -32,7 +32,9 @@ pub struct Surface {
 impl Drop for Surface {
 	#[inline]
 	fn drop(&mut self) {
-		unsafe { sys::SDL_FreeSurface(self.raw); }
+		unsafe {
+			sys::SDL_FreeSurface(self.raw);
+		}
 	}
 }
 
@@ -92,14 +94,16 @@ impl Surface {
 
 		// Maybe a blit is fine
 		unsafe {
-			memcpy((*raw).pixels as *const u8, (*surface).pixels as *mut u8, n as usize);
+			memcpy(
+				(*raw).pixels as *const u8,
+				(*surface).pixels as *mut u8,
+				n as usize,
+			);
 		}
 
 		// drop surf -> drop context -> drop it all
 
-		Ok(Surface { 
-			raw: surface
-		})
+		Ok(Surface { raw: surface })
 		/*
 			//let context = surf.context();
 			//drop(surf);

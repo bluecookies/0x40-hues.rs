@@ -1,18 +1,15 @@
-
 use std::fmt;
 
-use sdl2::pixels::{Color as Colour};
-use sdl2::render::{Canvas, Texture, TextureCreator, TextureQuery, RenderTarget};
+use sdl2::pixels::Color as Colour;
+use sdl2::render::{Canvas, RenderTarget, Texture, TextureCreator, TextureQuery};
 use sdl2::rect::Rect;
 use sdl2::video::WindowContext;
 
 use sdl2::ttf::Font;
 
-use ::Result;
-
+use Result;
 
 struct HexNum(i32);
-
 
 impl fmt::Display for HexNum {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -26,23 +23,24 @@ impl fmt::Display for HexNum {
 	}
 }
 
-
 pub struct TextUi {
 	texture: Texture,
 	rect: Rect,
 }
 
 impl TextUi {
-	pub fn create<T: AsRef<str>, Target>(text: T, font: &Font, texture_creator: &TextureCreator<Target>) -> Result<Self> {
-		let surface = font.render(text.as_ref()).blended(Colour::RGBA(0, 0, 0, 255))?;
+	pub fn create<T: AsRef<str>, Target>(
+		text: T,
+		font: &Font,
+		texture_creator: &TextureCreator<Target>,
+	) -> Result<Self> {
+		let surface = font.render(text.as_ref())
+			.blended(Colour::RGBA(0, 0, 0, 255))?;
 		let texture = texture_creator.create_texture_from_surface(&surface)?;
 		let TextureQuery { width, height, .. } = texture.query();
 		let rect = Rect::new(0, 0, width, height);
 
-		Ok(TextUi {
-			texture,
-			rect
-		})
+		Ok(TextUi { texture, rect })
 	}
 
 	pub fn draw<T: RenderTarget>(&self, canvas: &mut Canvas<T>) -> Result<()> {
@@ -62,8 +60,14 @@ impl TextUi {
 		self.rect.reposition((x, y));
 	}
 
-	pub fn set_text<T: AsRef<str>, Target>(&mut self, text: T, font: &Font, texture_creator: &TextureCreator<Target>) -> Result<()> {
-		let surface = font.render(text.as_ref()).blended(Colour::RGBA(0, 0, 0, 255))?;
+	pub fn set_text<T: AsRef<str>, Target>(
+		&mut self,
+		text: T,
+		font: &Font,
+		texture_creator: &TextureCreator<Target>,
+	) -> Result<()> {
+		let surface = font.render(text.as_ref())
+			.blended(Colour::RGBA(0, 0, 0, 255))?;
 		let texture = texture_creator.create_texture_from_surface(&surface)?;
 		let TextureQuery { width, height, .. } = texture.query();
 		let x = self.rect.left();
@@ -75,7 +79,6 @@ impl TextUi {
 		Ok(())
 	}
 }
-
 
 pub trait UiLayout {
 	fn update_mode(&mut self, full_auto: bool);
@@ -112,36 +115,40 @@ pub struct BasicUi<'a> {
 }
 
 impl<'a> BasicUi<'a> {
-	pub fn new(font: &'a Font<'a, 'static>, texture_creator: &'a TextureCreator<WindowContext>) -> Self {
+	pub fn new(
+		font: &'a Font<'a, 'static>,
+		texture_creator: &'a TextureCreator<WindowContext>,
+	) -> Self {
 		let mut mode_text = TextUi::create("M=FULL AUTO", &font, &texture_creator).unwrap();
-			mode_text.set_pos(0, 576);
+		mode_text.set_pos(0, 576);
 
 		let mut image_text = TextUi::create("I=", &font, &texture_creator).unwrap();
-			image_text.set_pos(0, 588);
+		image_text.set_pos(0, 588);
 		let mut timer_text = TextUi::create("T=$0x00000", &font, &texture_creator).unwrap();
-			timer_text.set_pos(0, 600);
+		timer_text.set_pos(0, 600);
 		let mut beat_text = TextUi::create("B=$0x0000", &font, &texture_creator).unwrap();
-			beat_text.set_pos(0, 612);
+		beat_text.set_pos(0, 612);
 
 		let mut x_blur_text = TextUi::create("X=$0x00", &font, &texture_creator).unwrap();
-			x_blur_text.set_pos(0, 624);
+		x_blur_text.set_pos(0, 624);
 		let mut y_blur_text = TextUi::create("Y=$0x00", &font, &texture_creator).unwrap();
-			y_blur_text.set_pos(0, 636);
+		y_blur_text.set_pos(0, 636);
 
 		let mut colour_index_text = TextUi::create("C=$0x00", &font, &texture_creator).unwrap();
-			colour_index_text.set_pos(0, 648);
+		colour_index_text.set_pos(0, 648);
 		let mut colour_name_text = TextUi::create("BLACK", &font, &texture_creator).unwrap();
-			colour_name_text.set_pos(0, 672);
+		colour_name_text.set_pos(0, 672);
 
 		let mut version_text = TextUi::create("V=$1", &font, &texture_creator).unwrap();
-			version_text.set_pos(0, 660);
+		version_text.set_pos(0, 660);
 
 		// Got to be careful, sdl_ttf doesn't like empty strings
 		let mut song_text = TextUi::create(" ", &font, &texture_creator).unwrap();
-			song_text.set_pos(0, 684);
+		song_text.set_pos(0, 684);
 
 		BasicUi {
-			font, texture_creator,
+			font,
+			texture_creator,
 
 			mode_text,
 
@@ -165,37 +172,79 @@ impl<'a> BasicUi<'a> {
 impl<'a> UiLayout for BasicUi<'a> {
 	fn update_mode(&mut self, full_auto: bool) {
 		let text = if full_auto { "FULL AUTO" } else { "NORMAL" };
-		self.mode_text.set_text(format!("M={}", text), self.font, self.texture_creator).unwrap();
+		self.mode_text
+			.set_text(format!("M={}", text), self.font, self.texture_creator)
+			.unwrap();
 	}
 	fn update_time(&mut self, time: i32) {
-		self.timer_text.set_text(format!("T={:5}", HexNum(time)), self.font, self.texture_creator).unwrap();
+		self.timer_text
+			.set_text(
+				format!("T={:5}", HexNum(time)),
+				self.font,
+				self.texture_creator,
+			)
+			.unwrap();
 	}
 
 	fn update_beat(&mut self, beat: i32) {
-		self.beat_text.set_text(format!("B={:4}", HexNum(beat)), self.font, self.texture_creator).unwrap();
+		self.beat_text
+			.set_text(
+				format!("B={:4}", HexNum(beat)),
+				self.font,
+				self.texture_creator,
+			)
+			.unwrap();
 	}
 
 	fn update_image(&mut self, image_name: &str) {
-		self.image_text.set_text(format!("I={}", image_name).to_uppercase(), self.font, self.texture_creator).unwrap();
+		self.image_text
+			.set_text(
+				format!("I={}", image_name).to_uppercase(),
+				self.font,
+				self.texture_creator,
+			)
+			.unwrap();
 	}
 
 	fn update_colour(&mut self, index: usize, name: &str) {
-		self.colour_index_text.set_text(format!("C={:2}", HexNum(index as i32)), self.font, self.texture_creator).unwrap();
-		self.colour_name_text.set_text(name.to_uppercase(), self.font, self.texture_creator).unwrap();
+		self.colour_index_text
+			.set_text(
+				format!("C={:2}", HexNum(index as i32)),
+				self.font,
+				self.texture_creator,
+			)
+			.unwrap();
+		self.colour_name_text
+			.set_text(name.to_uppercase(), self.font, self.texture_creator)
+			.unwrap();
 	}
 
 	fn update_x_blur(&mut self, x: f64) {
-		let x = if x >= 1.0 { 255 } else { (x * 256.0) as i32 }; 
-		self.x_blur_text.set_text(format!("X={:2}", HexNum(x)), self.font, self.texture_creator).unwrap();
+		let x = if x >= 1.0 { 255 } else { (x * 256.0) as i32 };
+		self.x_blur_text
+			.set_text(
+				format!("X={:2}", HexNum(x)),
+				self.font,
+				self.texture_creator,
+			)
+			.unwrap();
 	}
 
 	fn update_y_blur(&mut self, y: f64) {
-		let y = if y >= 1.0 { 255 } else { (y * 256.0) as i32 }; 
-		self.y_blur_text.set_text(format!("Y={:2}", HexNum(y)), self.font, self.texture_creator).unwrap();
+		let y = if y >= 1.0 { 255 } else { (y * 256.0) as i32 };
+		self.y_blur_text
+			.set_text(
+				format!("Y={:2}", HexNum(y)),
+				self.font,
+				self.texture_creator,
+			)
+			.unwrap();
 	}
 
 	fn update_song(&mut self, song_name: &str) {
-		self.song_text.set_text(song_name.to_uppercase(), self.font, self.texture_creator).unwrap();
+		self.song_text
+			.set_text(song_name.to_uppercase(), self.font, self.texture_creator)
+			.unwrap();
 	}
 
 	fn draw<T: RenderTarget>(&self, canvas: &mut Canvas<T>) -> Result<()> {

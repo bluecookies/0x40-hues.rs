@@ -2,9 +2,9 @@ use std::time::Instant;
 
 use sdl2::pixels::{Color as Colour, PixelFormatEnum};
 use sdl2::surface::Surface;
-use sdl2::render::{Texture, WindowCanvas as Canvas, TextureCreator};
+use sdl2::render::{Texture, TextureCreator, WindowCanvas as Canvas};
 
-use rand::{Rng, thread_rng as rng};
+use rand::{thread_rng as rng, Rng};
 
 use ui::UiLayout;
 use duration_to_secs;
@@ -24,9 +24,13 @@ impl Screen {
 			blackout_texture: {
 				// unsure whether large or small texture is good
 				let mut surface = Surface::new(1280, 720, PixelFormatEnum::RGBA8888).unwrap();
-				surface.fill_rect(None, Colour::RGBA(0x00, 0x00, 0x00, 0xFF)).unwrap();
-				texture_creator.create_texture_from_surface(surface).unwrap()
-			}
+				surface
+					.fill_rect(None, Colour::RGBA(0x00, 0x00, 0x00, 0xFF))
+					.unwrap();
+				texture_creator
+					.create_texture_from_surface(surface)
+					.unwrap()
+			},
 		}
 	}
 
@@ -39,7 +43,6 @@ impl Screen {
 	pub fn random_colour<T: UiLayout>(&mut self, ui: &mut T) {
 		let idx = rng().gen_range(0x00, HUES.len());
 		let (hue, name) = HUES[idx];
-
 
 		//ui.update_colour_index(idx);
 		//ui.update_colour_name(name);
@@ -72,71 +75,583 @@ impl Screen {
 	}
 }
 
-
 // 0x40 hues
+// damnit, rustfmt messed this up
 static HUES: [(Colour, &str); 0x40] = [
-	(Colour {r: 0x00, g: 0x00, b: 0x00, a: 0xFF}, "black"),
-	(Colour {r: 0x55, g: 0x00, b: 0x00, a: 0xFF}, "brick"),
-	(Colour {r: 0xAA, g: 0x00, b: 0x00, a: 0xFF}, "crimson"),
-	(Colour {r: 0xFF, g: 0x00, b: 0x00, a: 0xFF}, "red"),
-	(Colour {r: 0x00, g: 0x55, b: 0x00, a: 0xFF}, "turtle"),
-	(Colour {r: 0x55, g: 0x55, b: 0x00, a: 0xFF}, "sludge"),
-	(Colour {r: 0xAA, g: 0x55, b: 0x00, a: 0xFF}, "brown"),
-	(Colour {r: 0xFF, g: 0x55, b: 0x00, a: 0xFF}, "orange"),
-	(Colour {r: 0x00, g: 0xAA, b: 0x00, a: 0xFF}, "green"),
-	(Colour {r: 0x55, g: 0xAA, b: 0x00, a: 0xFF}, "grass"),
-	(Colour {r: 0xAA, g: 0xAA, b: 0x00, a: 0xFF}, "maize"),
-	(Colour {r: 0xFF, g: 0xAA, b: 0x00, a: 0xFF}, "citrus"),
-	(Colour {r: 0x00, g: 0xFF, b: 0x00, a: 0xFF}, "lime"),
-	(Colour {r: 0x55, g: 0xFF, b: 0x00, a: 0xFF}, "leaf"),
-	(Colour {r: 0xAA, g: 0xFF, b: 0x00, a: 0xFF}, "chartreuse"),
-	(Colour {r: 0xFF, g: 0xFF, b: 0x00, a: 0xFF}, "yellow"),
-	(Colour {r: 0x00, g: 0x00, b: 0x55, a: 0xFF}, "midnight"),
-	(Colour {r: 0x55, g: 0x00, b: 0x55, a: 0xFF}, "plum"),
-	(Colour {r: 0xAA, g: 0x00, b: 0x55, a: 0xFF}, "pomegranate"),
-	(Colour {r: 0xFF, g: 0x00, b: 0x55, a: 0xFF}, "rose"),
-	(Colour {r: 0x00, g: 0x55, b: 0x55, a: 0xFF}, "swamp"),
-	(Colour {r: 0x55, g: 0x55, b: 0x55, a: 0xFF}, "dust"),
-	(Colour {r: 0xAA, g: 0x55, b: 0x55, a: 0xFF}, "dirt"),
-	(Colour {r: 0xFF, g: 0x55, b: 0x55, a: 0xFF}, "blossom"),
-	(Colour {r: 0x00, g: 0xAA, b: 0x55, a: 0xFF}, "sea"),
-	(Colour {r: 0x55, g: 0xAA, b: 0x55, a: 0xFF}, "ill"),
-	(Colour {r: 0xAA, g: 0xAA, b: 0x55, a: 0xFF}, "haze"),
-	(Colour {r: 0xFF, g: 0xAA, b: 0x55, a: 0xFF}, "peach"),
-	(Colour {r: 0x00, g: 0xFF, b: 0x55, a: 0xFF}, "spring"),
-	(Colour {r: 0x55, g: 0xFF, b: 0x55, a: 0xFF}, "mantis"),
-	(Colour {r: 0xAA, g: 0xFF, b: 0x55, a: 0xFF}, "brilliant"),
-	(Colour {r: 0xFF, g: 0xFF, b: 0x55, a: 0xFF}, "canary"),
-	(Colour {r: 0x00, g: 0x00, b: 0xAA, a: 0xFF}, "navy"),
-	(Colour {r: 0x55, g: 0x00, b: 0xAA, a: 0xFF}, "grape"),
-	(Colour {r: 0xAA, g: 0x00, b: 0xAA, a: 0xFF}, "mauve"),
-	(Colour {r: 0xFF, g: 0x00, b: 0xAA, a: 0xFF}, "purple"),
-	(Colour {r: 0x00, g: 0x55, b: 0xAA, a: 0xFF}, "cornflower"),
-	(Colour {r: 0x55, g: 0x55, b: 0xAA, a: 0xFF}, "deep"),
-	(Colour {r: 0xAA, g: 0x55, b: 0xAA, a: 0xFF}, "lilac"),
-	(Colour {r: 0xFF, g: 0x55, b: 0xAA, a: 0xFF}, "lavender"),
-	(Colour {r: 0x00, g: 0xAA, b: 0xAA, a: 0xFF}, "aqua"),
-	(Colour {r: 0x55, g: 0xAA, b: 0xAA, a: 0xFF}, "steel"),
-	(Colour {r: 0xAA, g: 0xAA, b: 0xAA, a: 0xFF}, "grey"),
-	(Colour {r: 0xFF, g: 0xAA, b: 0xAA, a: 0xFF}, "pink"),
-	(Colour {r: 0x00, g: 0xFF, b: 0xAA, a: 0xFF}, "bay"),
-	(Colour {r: 0x55, g: 0xFF, b: 0xAA, a: 0xFF}, "marina"),
-	(Colour {r: 0xAA, g: 0xFF, b: 0xAA, a: 0xFF}, "tornado"),
-	(Colour {r: 0xFF, g: 0xFF, b: 0xAA, a: 0xFF}, "saltine"),
-	(Colour {r: 0x00, g: 0x00, b: 0xFF, a: 0xFF}, "blue"),
-	(Colour {r: 0x55, g: 0x00, b: 0xFF, a: 0xFF}, "twilight"),
-	(Colour {r: 0xAA, g: 0x00, b: 0xFF, a: 0xFF}, "orchid"),
-	(Colour {r: 0xFF, g: 0x00, b: 0xFF, a: 0xFF}, "magenta"),
-	(Colour {r: 0x00, g: 0x55, b: 0xFF, a: 0xFF}, "azure"),
-	(Colour {r: 0x55, g: 0x55, b: 0xFF, a: 0xFF}, "liberty"),
-	(Colour {r: 0xAA, g: 0x55, b: 0xFF, a: 0xFF}, "royalty"),
-	(Colour {r: 0xFF, g: 0x55, b: 0xFF, a: 0xFF}, "thistle"),
-	(Colour {r: 0x00, g: 0xAA, b: 0xFF, a: 0xFF}, "ocean"),
-	(Colour {r: 0x55, g: 0xAA, b: 0xFF, a: 0xFF}, "sky"),
-	(Colour {r: 0xAA, g: 0xAA, b: 0xFF, a: 0xFF}, "periwinkle"),
-	(Colour {r: 0xFF, g: 0xAA, b: 0xFF, a: 0xFF}, "carnation"),
-	(Colour {r: 0x00, g: 0xFF, b: 0xFF, a: 0xFF}, "cyan"),
-	(Colour {r: 0x55, g: 0xFF, b: 0xFF, a: 0xFF}, "turquoise"),
-	(Colour {r: 0xAA, g: 0xFF, b: 0xFF, a: 0xFF}, "powder"),
-	(Colour {r: 0xFF, g: 0xFF, b: 0xFF, a: 0xFF}, "white"),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x00,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"black",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x00,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"brick",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x00,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"crimson",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x00,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"red",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x55,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"turtle",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x55,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"sludge",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x55,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"brown",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x55,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"orange",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xAA,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"green",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xAA,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"grass",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xAA,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"maize",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xAA,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"citrus",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xFF,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"lime",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xFF,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"leaf",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xFF,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"chartreuse",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xFF,
+			b: 0x00,
+			a: 0xFF,
+		},
+		"yellow",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x00,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"midnight",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x00,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"plum",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x00,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"pomegranate",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x00,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"rose",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x55,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"swamp",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x55,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"dust",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x55,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"dirt",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x55,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"blossom",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xAA,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"sea",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xAA,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"ill",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xAA,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"haze",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xAA,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"peach",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xFF,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"spring",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xFF,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"mantis",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xFF,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"brilliant",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xFF,
+			b: 0x55,
+			a: 0xFF,
+		},
+		"canary",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x00,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"navy",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x00,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"grape",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x00,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"mauve",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x00,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"purple",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x55,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"cornflower",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x55,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"deep",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x55,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"lilac",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x55,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"lavender",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xAA,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"aqua",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xAA,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"steel",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xAA,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"grey",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xAA,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"pink",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xFF,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"bay",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xFF,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"marina",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xFF,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"tornado",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xFF,
+			b: 0xAA,
+			a: 0xFF,
+		},
+		"saltine",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x00,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"blue",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x00,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"twilight",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x00,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"orchid",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x00,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"magenta",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0x55,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"azure",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0x55,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"liberty",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0x55,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"royalty",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0x55,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"thistle",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xAA,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"ocean",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xAA,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"sky",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xAA,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"periwinkle",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xAA,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"carnation",
+	),
+	(
+		Colour {
+			r: 0x00,
+			g: 0xFF,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"cyan",
+	),
+	(
+		Colour {
+			r: 0x55,
+			g: 0xFF,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"turquoise",
+	),
+	(
+		Colour {
+			r: 0xAA,
+			g: 0xFF,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"powder",
+	),
+	(
+		Colour {
+			r: 0xFF,
+			g: 0xFF,
+			b: 0xFF,
+			a: 0xFF,
+		},
+		"white",
+	),
 ];

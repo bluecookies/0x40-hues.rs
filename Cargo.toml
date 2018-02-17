@@ -9,6 +9,7 @@ rodio = "0.6.0"
 simplemad = "0.8.1"
 xml-rs = "0.7"
 rand = "0.4"
+glob = "0.2.11"
 
 [dependencies.sdl2]
 features = ["use_mac_framework", "mixer", "image", "ttf", "unsafe_textures"]

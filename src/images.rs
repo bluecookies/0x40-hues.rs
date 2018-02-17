@@ -1,13 +1,13 @@
 use std::time::Instant;
 
-use rand::{Rng, thread_rng as rng};
+use rand::{thread_rng as rng, Rng};
 
 use sdl2::rect::Rect;
-use sdl2::render::{WindowCanvas as Canvas, Texture, TextureCreator};
+use sdl2::render::{Texture, TextureCreator, WindowCanvas as Canvas};
 
 use loader::ImageLoader;
 use ui::UiLayout;
-use ::Result;
+use Result;
 
 use duration_to_secs;
 
@@ -32,14 +32,16 @@ impl<'a, Target> ImageManager<'a, Target> {
 
 			blur: Blur::new(7),
 
-			texture_creator
+			texture_creator,
 		}
 	}
 
 	pub fn extend(&mut self, pack: Vec<ImageLoader>) {
 		let texture_creator = self.texture_creator;
 		self.images.extend(pack.into_iter().map(|image_loader| {
-			let texture = texture_creator.create_texture_from_surface(&image_loader.data).unwrap();
+			let texture = texture_creator
+				.create_texture_from_surface(&image_loader.data)
+				.unwrap();
 
 			Image::from_loader(image_loader, texture)
 		}));
@@ -57,7 +59,8 @@ impl<'a, Target> ImageManager<'a, Target> {
 
 	pub fn prev_image<S: UiLayout>(&mut self, ui: &mut S) {
 		let length = self.images.len();
-		let idx = self.curr_index.map_or(0, move |index| (index + length - 1) % length);
+		let idx = self.curr_index
+			.map_or(0, move |index| (index + length - 1) % length);
 		ui.update_image(&self.images[idx].name);
 
 		self.curr_index = Some(idx);
@@ -110,12 +113,17 @@ impl Image {
 			image: texture,
 			fullname: loader.fullname,
 			source: loader.source,
-			source_other: loader.source_other
+			source_other: loader.source_other,
 		}
 	}
 
 	// TODO: align
-	fn draw<S: UiLayout>(&mut self, blur: &mut Blur, canvas: &mut Canvas, ui: &mut S) -> Result<()> {
+	fn draw<S: UiLayout>(
+		&mut self,
+		blur: &mut Blur,
+		canvas: &mut Canvas,
+		ui: &mut S,
+	) -> Result<()> {
 		match blur.blur_type {
 			BlurType::Horizontal => {
 				self.image.set_alpha_mod(0xFF / blur.num);
@@ -123,7 +131,7 @@ impl Image {
 				let factor = blur.factor();
 				let dist = blur.dist * factor;
 
-				for x in (0..blur.num).map(|i| 2.0 * i as f64/(blur.num as f64 - 1.0) - 1.0) {
+				for x in (0..blur.num).map(|i| 2.0 * i as f64 / (blur.num as f64 - 1.0) - 1.0) {
 					let rect = Rect::new((x * dist) as i32, 0, 1280, 720);
 					canvas.copy(&self.image, None, Some(rect))?;
 				}
@@ -134,14 +142,14 @@ impl Image {
 				} else {
 					ui.update_x_blur(factor);
 				}
-			},
+			}
 			BlurType::Vertical => {
 				self.image.set_alpha_mod(0xFF / blur.num);
 
 				let factor = blur.factor();
 				let dist = blur.dist * factor;
 
-				for y in (0..blur.num).map(|i| 2.0 * i as f64/(blur.num as f64 - 1.0) - 1.0) {
+				for y in (0..blur.num).map(|i| 2.0 * i as f64 / (blur.num as f64 - 1.0) - 1.0) {
 					let rect = Rect::new(0, (y * dist) as i32, 1280, 720);
 					canvas.copy(&self.image, None, Some(rect))?;
 				}
@@ -152,7 +160,7 @@ impl Image {
 				} else {
 					ui.update_y_blur(factor);
 				}
-			},
+			}
 			BlurType::None => {
 				self.image.set_alpha_mod(0xD0);
 				canvas.copy(&self.image, None, None)?;
@@ -161,7 +169,6 @@ impl Image {
 		Ok(())
 	}
 }
-
 
 // Blur
 struct Blur {
@@ -174,7 +181,7 @@ struct Blur {
 enum BlurType {
 	Horizontal,
 	Vertical,
-	None
+	None,
 }
 
 impl Blur {
