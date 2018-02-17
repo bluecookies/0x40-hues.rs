@@ -15,6 +15,11 @@ pub struct Screen {
 	full_black: bool,
 	blackout_init: Option<Instant>,
 	blackout_texture: Texture,
+
+	fade_init: Option<Instant>,
+	fade_colour: Colour,
+	fade_texture: Texture,
+	fade_end: f64, // seconds
 }
 
 impl Screen {
@@ -35,12 +40,41 @@ impl Screen {
 					.create_texture_from_surface(surface)
 					.unwrap()
 			},
+
+			fade_texture: {
+				let mut surface = Surface::new(1280, 720, PixelFormatEnum::RGBA8888).unwrap();
+				surface
+					.fill_rect(None, Colour::RGBA(0xFF, 0xFF, 0xFF, 0xFF))
+					.unwrap();
+				texture_creator
+					.create_texture_from_surface(surface)
+					.unwrap()
+			},
+			fade_init: None,
+			fade_end: 1.0,
+			fade_colour: Colour::RGBA(0xFF, 0xFF, 0xFF, 0xFF),
 		}
 	}
 
-	pub fn clear(&self, canvas: &mut Canvas) {
+	pub fn clear(&mut self, canvas: &mut Canvas) {
 		canvas.set_draw_color(self.colour);
 		canvas.clear();
+
+		if let Some(start) = self.fade_init {
+			let fade = duration_to_secs(start.elapsed()) / self.fade_end;
+
+			if fade >= 1.0 {
+				self.colour = self.fade_colour;
+				self.fade_init = None;
+			} else {
+				// Canvas Blendmode should be Blend
+				// dstRGB = (srcRGB * srcA) + (dstRGB * (1 - srcA))
+				// dstA = srcA + (dstA * (1 - srcA)) = 1
+				let alpha = (fade * 256.0) as u8;
+				self.fade_texture.set_alpha_mod(alpha);
+				canvas.copy(&self.fade_texture, None, None).unwrap();
+			}
+		}
 	}
 
 	// I think I might need to change these to trait objects later if I'm serious
@@ -52,6 +86,18 @@ impl Screen {
 		//ui.update_colour_name(name);
 		ui.update_colour(idx, name);
 		self.colour = hue;
+	}
+
+	// Length is in seconds
+	pub fn fade_random<T: UiLayout>(&mut self, length: f64, ui: &mut T) {
+		let idx = rng().gen_range(0x00, HUES.len());
+		let (Colour {r, g, b, a}, name) = HUES[idx];
+
+		ui.update_colour(idx, name);
+		self.fade_texture.set_color_mod(r, g, b);
+		self.fade_colour = Colour { r, g, b, a };
+		self.fade_init = Some(Instant::now());
+		self.fade_end = length;
 	}
 
 	pub fn clear_blackout(&mut self) {

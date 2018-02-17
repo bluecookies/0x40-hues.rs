@@ -202,13 +202,13 @@ impl SongManager {
 					b'=' => {
 						image_manager.random_image(ui);
 
-						// colourfade
-						println!("TODO: colour fade");
+						let length = song.remaining_beat_time(new_index);
+						screen.fade_random(duration_to_secs(length), ui);
 						screen.clear_blackout();
 					}
 					b'~' => {
-						// colour fade
-						println!("TODO: colour fade");
+						let length = song.remaining_beat_time(new_index);
+						screen.fade_random(duration_to_secs(length), ui);
 						screen.clear_blackout();
 					}
 					ch => println!("TODO: {}", ch),
@@ -242,6 +242,7 @@ impl SongManager {
 	}
 }
 
+// TODO: guarantee that this will not be out of bounds for the song
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum BeatIndex {
 	Buildup(usize),
@@ -308,7 +309,7 @@ impl Song {
 		if beat_time >= self.buildup_duration {
 			let beat_time = beat_time - self.buildup_duration;
 			BeatIndex::Loop(
-				(duration_to_secs(beat_time) / duration_to_secs(self.loop_beat_length)) as usize,
+				((duration_to_secs(beat_time) / duration_to_secs(self.loop_beat_length)) as usize) % self.rhythm.len(),
 			)
 		} else {
 			BeatIndex::Buildup(
@@ -335,5 +336,43 @@ impl Song {
 		ui.update_song(&self.title);
 
 		sink
+	}
+
+	// Fun fact: multiplication isn't commutative for Duration * u32
+	fn remaining_beat_time(&self, beat_index: BeatIndex) -> Duration {
+		let buildup_duration = if let BeatIndex::Buildup(idx) = beat_index {
+			let remaining = self.buildup_rhythm.split_at(idx).1;
+			// Find position of first non '.'
+			if let Some(index) = remaining.iter().position(|&beat| beat != b'.') {
+				return self.buildup_beat_length * index as u32;
+			} else {
+				self.buildup_beat_length * remaining.len() as u32
+			}
+		} else {
+			Duration::new(0, 0)
+		};
+
+		let idx = if let BeatIndex::Loop(idx) = beat_index {
+			idx
+		} else {
+			0
+		};
+
+		let (before, remaining) = self.rhythm.split_at(idx);
+		// Find position of first non '.'
+		if let Some(index) = remaining.iter().position(|&beat| beat != b'.') {
+			return self.loop_beat_length * index as u32 + buildup_duration;
+		} else {
+			// The next one is after the loop, if it exists
+			let loop_duration = self.loop_beat_length * remaining.len() as u32 + buildup_duration;
+			
+			if let Some(index) = before.iter().position(|&beat| beat != b'.') {
+				return self.loop_beat_length * index as u32 + loop_duration;
+			}
+
+			return self.loop_beat_length * before.len() as u32 + loop_duration;
+
+			//unreachable!("There must have been a beat right? Unless this is being called for no reason")
+		}
 	}
 }
