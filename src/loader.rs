@@ -20,7 +20,7 @@ use sdl2::image::ImageRWops;
 //use sdl2::surface::SurfaceContext;
 
 use mp3::Mp3Decoder;
-use Song;
+use songs::Song;
 use surface::Surface;
 
 pub enum LoadStatus {

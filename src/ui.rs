@@ -78,6 +78,7 @@ impl TextUi {
 
 
 pub trait UiLayout {
+	fn update_mode(&mut self, full_auto: bool);
 	fn update_time(&mut self, time: i32);
 	fn update_beat(&mut self, beat: i32);
 	fn update_image(&mut self, image_name: &str);
@@ -162,6 +163,10 @@ impl<'a> BasicUi<'a> {
 }
 
 impl<'a> UiLayout for BasicUi<'a> {
+	fn update_mode(&mut self, full_auto: bool) {
+		let text = if full_auto { "FULL AUTO" } else { "NORMAL" };
+		self.mode_text.set_text(format!("M={}", text), self.font, self.texture_creator).unwrap();
+	}
 	fn update_time(&mut self, time: i32) {
 		self.timer_text.set_text(format!("T={:5}", HexNum(time)), self.font, self.texture_creator).unwrap();
 	}

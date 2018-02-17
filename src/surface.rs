@@ -13,7 +13,6 @@
 // So.. maybe Surface can be cloned? with a refcount? but no need for the time being
 
 use std::rc::Rc;
-use std::mem;
 use std::ptr::copy_nonoverlapping as memcpy;
 
 use std::os::raw::c_int;
