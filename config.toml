@@ -1,2 +1,8 @@
+#respacks = ["TriggerHappy"]
+
+#respacks = ["CharPackagev0.03", "Defaults_v5.0", "osuPack"]
+#song = "DJ Genericname - Dear you"
+
+
 respacks = ["SmashHues"]
 song = "Corneria (SNES Star Fox)"

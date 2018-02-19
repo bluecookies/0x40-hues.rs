@@ -21,6 +21,7 @@ use sdl2::keyboard::Scancode;
 use sdl2::render::BlendMode;
 
 use rodio::source::{Buffered, Source};
+use rodio::Sample;
 
 use glob::glob;
 
@@ -41,6 +42,8 @@ use screen::Screen;
 
 type Error = Box<std::error::Error>;
 type Result<T> = std::result::Result<T, Error>;
+
+//type AudioData = Buffered<Box<Source<Item = i16> + Send>>;
 type AudioData = Buffered<Box<Source<Item = i16> + Send>>;
 
 fn main() {
@@ -133,6 +136,7 @@ fn main() {
 				changed = true;
 			}
 			Ok(LoadStatus::Done(pack)) => {
+				println!("Pack loaded: {:?}", pack.info);
 				image_manager.extend(pack.images);
 				song_manager.extend(pack.songs);
 

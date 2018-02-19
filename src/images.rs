@@ -50,10 +50,12 @@ impl<'a, Target> ImageManager<'a, Target> {
 	// Ok this isn't actually "random image" but it's not being used anywhere else so it stays like this for now
 	pub fn random_image<S: UiLayout>(&mut self, ui: &mut S) {
 		if self.full_auto {
-			let idx = rng().gen_range(0, self.images.len());
-			ui.update_image(&self.images[idx].name);
+			if !self.images.is_empty() {
+				let idx = rng().gen_range(0, self.images.len());
+				ui.update_image(&self.images[idx].name);
 
-			self.curr_index = Some(idx);
+				self.curr_index = Some(idx);
+			}
 		}
 	}
 

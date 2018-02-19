@@ -8,7 +8,6 @@ use sdl2::video::WindowContext;
 
 use rodio;
 use rodio::{Endpoint, Sink, Source};
-
 use rodio::source::Zero as ZeroSource;
 
 use duration_to_secs;
@@ -20,15 +19,14 @@ use loader::SongData;
 
 use Result;
 
-// Make this internal, take a SongLoader from loader
 pub struct Song {
 	name: String,
-	title: String,
-	source: Option<String>,
-	rhythm: Vec<u8>,
+	pub title: String,
+	pub source: Option<String>,
+	pub rhythm: Vec<char>,
 
 	buildup: Option<String>,
-	buildup_rhythm: Vec<u8>,
+	pub buildup_rhythm: Vec<char>,
 
 	// Length of beat
 	loop_beat_length: Duration,
@@ -149,64 +147,64 @@ impl SongManager {
 			let new_index = song.get_beat_index(self.beat_time.elapsed());
 			if self.beat_index != Some(new_index) {
 				match song.get_beat(new_index) {
-					b'.' => {}
-					b'-' => {
+					'.' => {}
+					'-' => {
 						screen.random_colour(ui);
 						image_manager.random_image(ui);
 
 						screen.clear_blackout();
 					}
-					b'o' => {
+					'o' => {
 						screen.random_colour(ui);
 						image_manager.random_image(ui);
 
 						image_manager.blur_x(ui);
 						screen.clear_blackout();
 					}
-					b'x' => {
+					'x' => {
 						screen.random_colour(ui);
 						image_manager.random_image(ui);
 
 						image_manager.blur_y(ui);
 						screen.clear_blackout();
 					}
-					b'O' => {
+					'O' => {
 						image_manager.blur_x(ui);
 						screen.clear_blackout();
 					}
-					b'X' => {
+					'X' => {
 						image_manager.blur_y(ui);
 						screen.clear_blackout();
 					}
-					b':' => {
+					':' => {
 						screen.random_colour(ui);
 						screen.clear_blackout();
 					}
-					b'+' => {
+					'+' => {
 						// blur x?
 						image_manager.blur_x(ui);
 						screen.blackout();
 					}
-					b'|' => {
+					'|' => {
 						screen.short_blackout();
 						screen.random_colour(ui);
 
 						// check this
 						image_manager.random_image(ui);
 					}
-					b'*' => {
+					'*' => {
 						image_manager.random_image(ui);
 
 						screen.clear_blackout();
 					}
-					b'=' => {
+					'=' => {
 						image_manager.random_image(ui);
 
 						let length = song.remaining_beat_time(new_index);
 						screen.fade_random(duration_to_secs(length), ui);
 						screen.clear_blackout();
 					}
-					b'~' => {
+					'~' => {
 						let length = song.remaining_beat_time(new_index);
 						screen.fade_random(duration_to_secs(length), ui);
 						screen.clear_blackout();
@@ -223,14 +221,9 @@ impl SongManager {
 				let loop_time = duration_to_secs(song.loop_duration);
 
 				let beat_time = ((time - buildup_time) % loop_time) * 1000.0;
-				let beat_index = match self.beat_index {
-					Some(BeatIndex::Loop(idx)) => idx as i32,
-					Some(BeatIndex::Buildup(idx)) => idx as i32 - song.buildup_rhythm.len() as i32,
-					None => 0,
-				};
 
 				ui.update_time(beat_time as i32);
-				ui.update_beat(beat_index);
+				ui.update_beat(new_index);
 			}
 		}
 	}
@@ -244,7 +237,7 @@ impl SongManager {
 
 // TODO: guarantee that this will not be out of bounds for the song
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum BeatIndex {
+pub enum BeatIndex {
 	Buildup(usize),
 	Loop(usize),
 }
@@ -292,7 +285,7 @@ impl Song {
 			if let Some(source) = audio_data.remove(buildup) {
 				song.buildup_duration = source.total_duration().unwrap();
 				if song.buildup_rhythm.is_empty() {
-					song.buildup_rhythm.push(b'.');
+					song.buildup_rhythm.push('.');
 				}
 				song.buildup_beat_length = song.buildup_duration / song.buildup_rhythm.len() as u32;
 
@@ -318,7 +311,7 @@ impl Song {
 		}
 	}
 
-	fn get_beat(&self, beat_index: BeatIndex) -> u8 {
+	fn get_beat(&self, beat_index: BeatIndex) -> char {
 		match beat_index {
 			BeatIndex::Loop(index) => self.rhythm[index % self.rhythm.len()],
 			BeatIndex::Buildup(index) => self.buildup_rhythm[index % self.buildup_rhythm.len()],
@@ -333,7 +326,7 @@ impl Song {
 
 		sink.append(self.loop_audio.clone().repeat_infinite());
 
-		ui.update_song(&self.title);
+		ui.update_song(self);
 
 		sink
 	}
@@ -343,7 +336,7 @@ impl Song {
 		let buildup_duration = if let BeatIndex::Buildup(idx) = beat_index {
 			let remaining = self.buildup_rhythm.split_at(idx).1;
 			// Find position of first non '.'
-			if let Some(index) = remaining.iter().position(|&beat| beat != b'.') {
+			if let Some(index) = remaining.iter().position(|&beat| beat != '.') {
 				return self.buildup_beat_length * index as u32;
 			} else {
 				self.buildup_beat_length * remaining.len() as u32
@@ -353,20 +346,20 @@ impl Song {
 		};
 
 		let idx = if let BeatIndex::Loop(idx) = beat_index {
-			idx
+			idx % self.rhythm.len()
 		} else {
 			0
 		};
 
 		let (before, remaining) = self.rhythm.split_at(idx);
 		// Find position of first non '.'
-		if let Some(index) = remaining.iter().position(|&beat| beat != b'.') {
+		if let Some(index) = remaining.iter().position(|&beat| beat != '.') {
 			return self.loop_beat_length * index as u32 + buildup_duration;
 		} else {
 			// The next one is after the loop, if it exists
 			let loop_duration = self.loop_beat_length * remaining.len() as u32 + buildup_duration;
 			
-			if let Some(index) = before.iter().position(|&beat| beat != b'.') {
+			if let Some(index) = before.iter().position(|&beat| beat != '.') {
 				return self.loop_beat_length * index as u32 + loop_duration;
 			}
 

@@ -3,3 +3,5 @@
 **/*.rs.bk
 
 /respacks/*
+
+.DS_Store

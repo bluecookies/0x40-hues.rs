@@ -32,6 +32,7 @@ pub enum LoadStatus {
 
 // SDL2-rust implementation of surface isn't threadsafe for some reason
 pub struct ResPack {
+	pub info: PackInfo,
 	pub images: Vec<ImageLoader>,
 	pub songs: Vec<Song>,
 }
@@ -49,10 +50,10 @@ pub struct SongData {
 	pub name: String,
 	pub title: String,
 	pub source: Option<String>,
-	pub rhythm: Vec<u8>,
+	pub rhythm: Vec<char>,
 
 	pub buildup: Option<String>,
-	pub buildup_rhythm: Vec<u8>,
+	pub buildup_rhythm: Vec<char>,
 }
 
 impl ImageLoader {
@@ -82,8 +83,26 @@ struct ImageData {
 	// frameDuration
 }
 
+#[derive(Debug, Default)]
+pub struct PackInfo {
+	name: String,
+	author: Option<String>,
+	description: Option<String>,
+	link: Option<String>
+}
+
+impl PackInfo {
+	fn new(name: &str) -> Self {
+		PackInfo {
+			name: name.to_owned(),
+			..Default::default()
+		}
+	}
+}
+
 pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) -> Result<()> {
-	let f = File::open(path.as_ref())?;
+	let path = path.as_ref();
+	let f = File::open(path)?;
 	let total_size = f.metadata()?.len();
 	tx.send(LoadStatus::TotalSize(total_size))?;
 
@@ -94,6 +113,9 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) -> Result<(
 
 	let mut song_data = Vec::new();
 	let mut image_data = Vec::new();
+	let mut pack_info = PackInfo::new(path.file_stem().and_then(OsStr::to_str).unwrap_or("???"));
+
+	let mut loaded_size = 0;
 	for i in 0..archive.len() {
 		let mut file = archive.by_index(i)?;
 		let path: PathBuf = file.name().into();
@@ -125,12 +147,17 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) -> Result<(
 				audio.insert(name.to_owned(), source);
 			}
 			Some("xml") => {
-				parse_xml(file, &mut song_data, &mut image_data);
+				parse_xml(file, &mut song_data, &mut image_data, &mut pack_info);
 			}
+			Some("") => {},
 			_ => println!("{:?}", path),
 		}
 		tx.send(LoadStatus::LoadSize(size))?;
+		loaded_size += size;
 	}
+
+	// Leftovers
+	tx.send(LoadStatus::LoadSize(total_size - loaded_size))?;
 
 	// Process songs
 	let songs: Vec<Song> = song_data
@@ -152,6 +179,7 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) -> Result<(
 	}
 
 	tx.send(LoadStatus::Done(ResPack {
+		info: pack_info,
 		images: images.into_iter().map(|(_k, v)| v).collect(),
 		songs,
 	}))?;
@@ -159,13 +187,16 @@ pub fn load_respack<T: AsRef<Path>>(path: T, tx: Sender<LoadStatus>) -> Result<(
 	Ok(())
 }
 
-//XML
+// XML
+// tempted to try and write a macro to handle this
+// maybe if it grows some more
 enum State {
 	Document,
 	Songs,
 	Song(Option<SongField>),
 	Images,
 	Image(Option<ImageField>),
+	Info(Option<InfoField>),
 }
 #[derive(Copy, Clone, Debug)]
 enum SongField {
@@ -183,10 +214,17 @@ enum ImageField {
 	Align,
 	FrameDuration, // TODO: handle animations
 }
+#[derive(Copy, Clone, Debug)]
+enum InfoField {
+	Name,
+	Author,
+	Description,
+	Link,
+}
 
 // based off code from stebalien on rust-lang
 // ok this got ugly, clean it up
-fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageData>) {
+fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageData>, pack_info: &mut PackInfo) {
 	let mut reader = EventReader::new(BufReader::new(file));
 
 	let mut state = State::Document;
@@ -210,6 +248,7 @@ fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageDat
 			State::Document => match event {
 				XmlEvent::StartDocument { .. } => State::Document,
 				XmlEvent::StartElement { name, .. } => match name.local_name.as_ref() {
+					"info" => State::Info(None),
 					"songs" => State::Songs,
 					"images" => State::Images,
 					_ => {
@@ -219,7 +258,10 @@ fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageDat
 					}
 				},
 				XmlEvent::EndDocument => break,
-				_ => panic!("Unexpected"),
+				_ => {
+					println!("Unexpected");
+					State::Document
+				}
 			},
 			State::Songs => match event {
 				XmlEvent::StartElement {
@@ -244,7 +286,10 @@ fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageDat
 				}
 				XmlEvent::EndElement { .. } => State::Document,
 				XmlEvent::Whitespace(_) => State::Songs,
-				_ => panic!("Expected a song tag - got {:?}", event),
+				_ => {
+					println!("Expected a song tag - got {:?}", event);
+					State::Songs
+				}
 			},
 			State::Song(None) => match event {
 				XmlEvent::StartElement { ref name, .. } => match name.local_name.as_ref() {
@@ -261,6 +306,7 @@ fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageDat
 				},
 				XmlEvent::EndElement { .. } => {
 					if song_rhythm.is_empty() {
+						// TODO: be graceful
 						panic!("Empty rhythm");
 					}
 
@@ -287,7 +333,7 @@ fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageDat
 							if !data.is_ascii() {
 								panic!("Expected ascii characters in rhythm");
 							}
-							song_rhythm = data.into_bytes();
+							song_rhythm = data.chars().collect();
 						}
 						SongField::Buildup => song_buildup = Some(data),
 						SongField::BuildupRhythm => {
@@ -297,7 +343,7 @@ fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageDat
 							if data.is_empty() {
 								panic!("Buildup rhythm empty!");
 							}
-							song_buildup_rhythm = data.into_bytes();
+							song_buildup_rhythm = data.chars().collect();
 						}
 					}
 					State::Song(Some(field))
@@ -370,6 +416,37 @@ fn parse_xml(file: ZipFile, songs: &mut Vec<SongData>, images: &mut Vec<ImageDat
 				XmlEvent::EndElement { .. } => State::Image(None),
 				_ => panic!("Expected data for tag {:?}", field),
 			},
+			State::Info(None) => match event {
+				XmlEvent::StartElement { ref name, .. } => match name.local_name.as_ref() {
+					"name" => State::Info(Some(InfoField::Name)),
+					"author" => State::Info(Some(InfoField::Author)),
+					"description" => State::Info(Some(InfoField::Description)),
+					"link" => State::Info(Some(InfoField::Link)),
+					_ => {
+						println!("Unknown info field {}", name.local_name);
+						xml_skip_tag(&mut reader).unwrap();
+						State::Info(None)
+					}
+				},
+				XmlEvent::EndElement { .. } => State::Document,
+				_ => State::Info(None),
+			},
+			State::Info(Some(field)) => match event {
+				XmlEvent::Characters(data) => {
+					match field {
+						InfoField::Name => pack_info.name = data,
+						InfoField::Author => pack_info.author = Some(data),
+						InfoField::Description => pack_info.description = Some(data),
+						InfoField::Link => pack_info.link = Some(data),
+					}
+					State::Info(Some(field))
+				}
+				XmlEvent::EndElement { .. } => State::Info(None),
+				_ => {
+					println!("Expected data for tag {:?}", field);
+					State::Info(Some(field))
+				}
+			}
 		}
 	}
 }

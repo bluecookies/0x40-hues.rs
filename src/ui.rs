@@ -8,6 +8,7 @@ use sdl2::video::WindowContext;
 use sdl2::ttf::Font;
 
 use Result;
+use songs::{Song, BeatIndex};
 
 struct HexNum(i32);
 
@@ -83,15 +84,18 @@ impl TextUi {
 pub trait UiLayout {
 	fn update_mode(&mut self, full_auto: bool);
 	fn update_time(&mut self, time: i32);
-	fn update_beat(&mut self, beat: i32);
+	fn update_beat(&mut self, beat: BeatIndex);
 	fn update_image(&mut self, image_name: &str);
 	fn update_colour(&mut self, index: usize, name: &str);
 	fn update_x_blur(&mut self, x: f64);
 	fn update_y_blur(&mut self, y: f64);
-	fn update_song(&mut self, song_name: &str);
+	fn update_song(&mut self, song: &Song);
 
 	fn draw<T: RenderTarget>(&self, canvas: &mut Canvas<T>) -> Result<()>;
 }
+
+
+//
 
 pub struct BasicUi<'a> {
 	font: &'a Font<'a, 'static>,
@@ -112,39 +116,55 @@ pub struct BasicUi<'a> {
 	version_text: TextUi,
 
 	song_text: TextUi,
+
+	rhythm_marker: TextUi,
+	rhythm_text: TextUi,
+
+	//
+	buildup_rhythm: Vec<char>,
+	rhythm: Vec<char>,
 }
 
+// TODO: draw characters instead of rendering the text
 impl<'a> BasicUi<'a> {
 	pub fn new(
 		font: &'a Font<'a, 'static>,
 		texture_creator: &'a TextureCreator<WindowContext>,
 	) -> Self {
 		let mut mode_text = TextUi::create("M=FULL AUTO", &font, &texture_creator).unwrap();
-		mode_text.set_pos(0, 576);
+		mode_text.set_pos(0, 588);
 
 		let mut image_text = TextUi::create("I=", &font, &texture_creator).unwrap();
-		image_text.set_pos(0, 588);
+		image_text.set_pos(0, 600);
 		let mut timer_text = TextUi::create("T=$0x00000", &font, &texture_creator).unwrap();
-		timer_text.set_pos(0, 600);
+		timer_text.set_pos(0, 612);
 		let mut beat_text = TextUi::create("B=$0x0000", &font, &texture_creator).unwrap();
-		beat_text.set_pos(0, 612);
+		beat_text.set_pos(0, 624);
 
 		let mut x_blur_text = TextUi::create("X=$0x00", &font, &texture_creator).unwrap();
-		x_blur_text.set_pos(0, 624);
+		x_blur_text.set_pos(0, 636);
 		let mut y_blur_text = TextUi::create("Y=$0x00", &font, &texture_creator).unwrap();
-		y_blur_text.set_pos(0, 636);
+		y_blur_text.set_pos(0, 648);
 
 		let mut colour_index_text = TextUi::create("C=$0x00", &font, &texture_creator).unwrap();
-		colour_index_text.set_pos(0, 648);
+		colour_index_text.set_pos(0, 660);
 		let mut colour_name_text = TextUi::create("BLACK", &font, &texture_creator).unwrap();
-		colour_name_text.set_pos(0, 672);
+		colour_name_text.set_pos(0, 684);
 
 		let mut version_text = TextUi::create("V=$1", &font, &texture_creator).unwrap();
-		version_text.set_pos(0, 660);
+		version_text.set_pos(0, 672);
 
 		// Got to be careful, sdl_ttf doesn't like empty strings
 		let mut song_text = TextUi::create(" ", &font, &texture_creator).unwrap();
-		song_text.set_pos(0, 684);
+		song_text.set_pos(0, 696);
+
+
+		let mut rhythm_marker = TextUi::create(">>", &font, &texture_creator).unwrap();
+		rhythm_marker.set_pos(0, 708);
+		let width = rhythm_marker.rect.width() as i32;
+		
+		let mut rhythm_text = TextUi::create(" ", &font, &texture_creator).unwrap();
+		rhythm_text.set_pos(width, 708);
 
 		BasicUi {
 			font,
@@ -165,6 +185,12 @@ impl<'a> BasicUi<'a> {
 			version_text,
 
 			song_text,
+
+			rhythm_marker,
+			rhythm_text,
+
+			buildup_rhythm: Vec::new(),
+			rhythm: Vec::new(),
 		}
 	}
 }
@@ -186,10 +212,26 @@ impl<'a> UiLayout for BasicUi<'a> {
 			.unwrap();
 	}
 
-	fn update_beat(&mut self, beat: i32) {
+	// TODO: better way to do this
+	// Possibilities:
+	// 1. render copy characters manually each beat
+	// 2. prerender the entire thing and only display part of it
+	fn update_beat(&mut self, beat: BeatIndex) {
+		let index = match beat {
+			BeatIndex::Loop(idx) => {
+				let beat_string: String = self.rhythm.iter().cycle().skip(idx).take(256).collect();
+				self.rhythm_text.set_text(beat_string, self.font, self.texture_creator).unwrap();
+				idx as i32
+			},
+			BeatIndex::Buildup(idx) => {
+				let beat_string: String = self.buildup_rhythm.iter().skip(idx).chain(self.rhythm.iter().cycle()).take(256).collect();
+				self.rhythm_text.set_text(beat_string, self.font, self.texture_creator).unwrap();
+				idx as i32 - self.buildup_rhythm.len() as i32
+			},
+		};
 		self.beat_text
 			.set_text(
-				format!("B={:4}", HexNum(beat)),
+				format!("B={:4}", HexNum(index)),
 				self.font,
 				self.texture_creator,
 			)
@@ -241,10 +283,13 @@ impl<'a> UiLayout for BasicUi<'a> {
 			.unwrap();
 	}
 
-	fn update_song(&mut self, song_name: &str) {
+	fn update_song(&mut self, song: &Song) {
 		self.song_text
-			.set_text(song_name.to_uppercase(), self.font, self.texture_creator)
+			.set_text(song.title.to_uppercase(), self.font, self.texture_creator)
 			.unwrap();
+
+		self.buildup_rhythm = song.buildup_rhythm.clone();
+		self.rhythm = song.rhythm.clone();
 	}
 
 	fn draw<T: RenderTarget>(&self, canvas: &mut Canvas<T>) -> Result<()> {
@@ -262,6 +307,9 @@ impl<'a> UiLayout for BasicUi<'a> {
 		self.colour_name_text.draw(canvas)?;
 
 		self.song_text.draw(canvas)?;
+
+		self.rhythm_marker.draw(canvas)?;
+		self.rhythm_text.draw(canvas)?;
 
 		Ok(())
 	}
